@@ -1,0 +1,6 @@
+# 凭据与运行时数据 — 绝不上传
+accounts.json
+settings.json
+gateway-key.txt
+usage/
+*.log

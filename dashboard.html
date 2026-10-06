@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>vyce2api · 网关中枢</title>
+<style>
+:root{--bg:#0b0d10;--card:#14171c;--card2:#1a1e25;--line:#262b33;--fg:#e6e9ee;--mut:#8b93a1;--acc:#4d8dff;--ok:#46dc82;--warn:#f0be5a;--bad:#e86e6e}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+.layout{display:flex;min-height:100vh}
+.side{width:200px;border-right:1px solid var(--line);padding:20px 14px;flex-shrink:0;position:sticky;top:0;height:100vh}
+.side h1{font-size:16px;margin-bottom:4px}
+.side .sub{font-size:11px;color:var(--mut);margin-bottom:22px}
+.nav{display:flex;flex-direction:column;gap:4px}
+.nav button{all:unset;cursor:pointer;padding:9px 12px;border-radius:8px;color:var(--mut);font-size:13px;border:1px solid transparent}
+.nav button:hover{color:var(--fg);background:var(--card)}
+.nav button.on{color:var(--fg);background:var(--card2);border-color:var(--line);font-weight:600}
+.main{flex:1;padding:24px 28px;max-width:1150px}
+.page{display:none}.page.on{display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0 22px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card .v{font-size:24px;font-weight:700}
+.card .l{color:var(--mut);font-size:12px;margin-top:2px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.panel h2{font-size:15px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+.panel h2 .mut{font-size:11px;font-weight:400}
+table{width:100%;border-collapse:collapse}
+th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);font-size:13px}
+th{color:var(--mut);font-weight:500;font-size:12px}
+tr:last-child td{border-bottom:0}
+.badge{display:inline-block;font-size:11px;border-radius:99px;padding:2px 10px;font-weight:600}
+.b-ok{background:#12351f;color:var(--ok)}.b-cd{background:#3a2f10;color:var(--warn)}.b-off{background:#3a1616;color:var(--bad)}.b-info{background:#16283f;color:var(--acc)}
+button{cursor:pointer;border:1px solid var(--line);background:#1c2129;color:var(--fg);border-radius:6px;padding:5px 12px;font-size:12px}
+button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button.danger:hover{border-color:var(--bad);color:var(--bad)}
+.mut{color:var(--mut);font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.bar{height:6px;background:#0e1116;border-radius:3px;overflow:hidden;margin-top:4px}
+.bar>i{display:block;height:100%;background:var(--acc);border-radius:3px}
+input,select{background:#0e1116;border:1px solid var(--line);border-radius:6px;color:var(--fg);padding:8px 10px;font-size:13px;width:100%}
+.kv{display:grid;grid-template-columns:130px 1fr;gap:10px 16px;align-items:center;font-size:13px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#loginMask{position:fixed;inset:0;background:rgba(5,6,8,.85);display:none;place-items:center;z-index:50}
+#loginMask.show{display:grid}
+#loginMask>div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px;width:340px}
+#loginMask h2{font-size:17px;margin-bottom:6px}
+#oauthBox{display:none;background:var(--card2);border:1px solid var(--acc);border-radius:10px;padding:14px;margin:12px 0}
+#oauthBox a{color:var(--acc);word-break:break-all}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--mut);border-top-color:var(--acc);border-radius:50%;animation:sp 1s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.logerr{color:var(--bad)}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--card2);border:1px solid var(--acc);border-radius:8px;padding:10px 16px;font-size:13px;display:none;z-index:60}
+</style></head><body>
+
+<div id="loginMask"><div>
+  <h2>vyce2api 网关中枢</h2>
+  <p class="mut" style="margin-bottom:14px">输入面板访问密码（默认 admin）</p>
+  <input id="pwd" type="password" placeholder="面板密码" onkeydown="if(event.key==='Enter')doLogin()">
+  <div class="row" style="margin-top:14px"><button class="primary" onclick="doLogin()">登录</button><span class="mut logerr" id="loginErr"></span></div>
+</div></div>
+
+<div class="layout">
+<nav class="side">
+  <h1>vyce2api</h1>
+  <div class="sub">Vyce Code → OpenAI 网关</div>
+  <div class="nav">
+    <button data-p="pDash" class="on" onclick="showPage('pDash',this)">📊 分析</button>
+    <button data-p="pAcct" onclick="showPage('pAcct',this)">👤 账号</button>
+    <button data-p="pLogs" onclick="showPage('pLogs',this)">📜 日志</button>
+    <button data-p="pSet" onclick="showPage('pSet',this)">⚙️ 设置</button>
+  </div>
+  <div style="margin-top:auto;padding-top:20px" class="mut" id="sideInfo"></div>
+</nav>
+
+<main class="main">
+
+<!-- ============ 分析 ============ -->
+<section class="page on" id="pDash">
+  <div class="cards">
+    <div class="card"><div class="v" id="cReq">-</div><div class="l">累计请求</div></div>
+    <div class="card"><div class="v" id="cTok">-</div><div class="l">累计 tokens</div></div>
+    <div class="card"><div class="v" style="color:var(--ok)" id="cRate">-</div><div class="l">成功率</div></div>
+    <div class="card"><div class="v" style="color:var(--acc)" id="cOk">-</div><div class="l">可用账号</div></div>
+    <div class="card"><div class="v" id="cToday">-</div><div class="l">今日请求</div></div>
+  </div>
+
+  <div class="panel"><h2>模型性能指标与用量一览 <span class="mut">按请求数排序</span></h2>
+    <table><thead><tr><th>模型</th><th>请求</th><th>成功率</th><th>平均时延</th><th>tokens</th></tr></thead>
+    <tbody id="perfBody"><tr><td colspan="5" class="mut">暂无数据</td></tr></tbody></table>
+  </div>
+
+  <div class="panel"><h2>各账号用量透视</h2>
+    <table><thead><tr><th>账号</th><th>状态</th><th>请求</th><th>tokens</th><th>模型分布</th></tr></thead>
+    <tbody id="usageBody"><tr><td colspan="5" class="mut">暂无数据</td></tr></tbody></table>
+  </div>
+
+  <div class="panel"><h2>当前版本模型库与能力清单 <span class="mut">状态来自 vyce-code.com/api/status</span></h2>
+    <table><thead><tr><th>模型</th><th>名称</th><th>上下文</th><th>日限额</th><th>状态</th></tr></thead>
+    <tbody id="modBody"><tr><td colspan="5" class="mut">加载中…</td></tr></tbody></table>
+  </div>
+</section>
+
+<!-- ============ 账号 ============ -->
+<section class="page" id="pAcct">
+  <div class="panel"><h2>账号池 <button class="primary" onclick="startOAuth()">+ 添加账号 (OAuth)</button></h2>
+    <div id="oauthBox">
+      <div id="oauthWait"><span class="spin"></span> 请在浏览器中完成授权（5 分钟内）：
+        <div style="margin:8px 0"><a id="oauthLink" target="_blank" href="#"></a></div>
+        <span class="mut">批准后本页自动更新</span></div>
+      <div id="oauthDone" style="display:none"></div>
+    </div>
+    <table><thead><tr><th>账号</th><th>设备</th><th>状态</th><th>请求</th><th>tokens</th><th>最近使用</th><th>操作</th></tr></thead>
+    <tbody id="acctBody"><tr><td colspan="7" class="mut">加载中…</td></tr></tbody></table>
+  </div>
+</section>
+
+<!-- ============ 日志 ============ -->
+<section class="page" id="pLogs">
+  <div class="panel"><h2>最近请求 <span class="row"><button onclick="loadLogs()">刷新</button><button class="danger" onclick="clearLogs()">清空</button></span></h2>
+    <table><thead><tr><th>时间</th><th>模型</th><th>账号</th><th>状态</th><th>时延</th><th>tokens</th><th>流式</th></tr></thead>
+    <tbody id="logBody"><tr><td colspan="7" class="mut">暂无日志</td></tr></tbody></table>
+  </div>
+</section>
+
+<!-- ============ 设置 ============ -->
+<section class="page" id="pSet">
+  <div class="panel"><h2>API Key 与接入信息</h2>
+    <div class="kv">
+      <span class="mut">Base URL</span><span class="mono" id="setBase">-</span>
+      <span class="mut">API Key</span>
+      <span class="row"><span class="mono" id="setKey">-</span>
+        <button onclick="copyKey()">复制</button>
+        <button class="danger" onclick="regenKey()">重新生成</button></span>
+    </div>
+    <p class="mut" style="margin-top:10px">客户端（Cherry Studio / NextChat 等）选 OpenAI 兼容，填入 Base URL 与 API Key。重新生成后旧 Key 立即失效。</p>
+  </div>
+
+  <div class="panel"><h2>面板访问密码</h2>
+    <div class="kv">
+      <span class="mut">原密码</span><input id="oldPwd" type="password" placeholder="默认 admin">
+      <span class="mut">新密码</span><input id="newPwd" type="password" placeholder="至少 4 位">
+      <span></span><span class="row"><button class="primary" onclick="changePwd()">修改密码</button><span class="mut" id="pwdMsg"></span></span>
+    </div>
+  </div>
+
+  <div class="panel"><h2>网关信息</h2>
+    <div class="kv">
+      <span class="mut">上游</span><span class="mono" id="setUp">-</span>
+      <span class="mut">协议版本</span><span class="mono" id="setVer">-</span>
+      <span class="mut">面板状态</span><span><button onclick="doLogout()">退出登录</button></span>
+    </div>
+  </div>
+</section>
+
+</main></div>
+<div class="toast" id="toast"></div>
+
+<script>
+let TOKEN = sessionStorage.getItem('vyce2api_panel') || '';
+const $ = id => document.getElementById(id);
+
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',2600); }
+async function api(p, opt){
+  const r = await fetch(p, {...opt, headers:{'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'}});
+  if (r.status === 401) { $('loginMask').classList.add('show'); throw new Error('401'); }
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(j.error || ('HTTP '+r.status));
+  return j;
+}
+async function doLogin(){
+  try {
+    const j = await api('/panel/login',{method:'POST',body:JSON.stringify({password:$('pwd').value})});
+    TOKEN = j.token; sessionStorage.setItem('vyce2api_panel', TOKEN);
+    $('loginMask').classList.remove('show');
+    if (!j.hasCustomPassword) toast('正在使用默认密码 admin，建议到「设置」修改');
+    refreshAll();
+  } catch(e){ $('loginErr').textContent = e.message==='401' ? '' : e.message; if(e.message!=='401') $('loginErr').textContent='密码错误'; }
+}
+async function doLogout(){
+  try{ await api('/panel/logout',{method:'POST'}); }catch{}
+  sessionStorage.removeItem('vyce2api_panel'); TOKEN='';
+  $('loginMask').classList.add('show');
+}
+function showPage(id, btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on', p.id===id));
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('on', b===btn));
+  if (id==='pLogs') loadLogs();
+}
+const fmt = n => n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'K':String(n||0);
+const fmtT = t => t ? new Date(t).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+const badge = a => a.disabled ? '<span class="badge b-off">停用</span>' : a.cooldown ? '<span class="badge b-cd">冷却</span>' : '<span class="badge b-ok">在线</span>';
+const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ---------- 分析页 ----------
+async function loadDash(){
+  const [an, perf, byAcct] = await Promise.all([
+    api('/usage/analytics'), api('/usage/perf'), api('/usage/by-account'),
+  ]);
+  loadModelsViaKey();
+  $('cReq').textContent = fmt(an.total.requests);
+  $('cTok').textContent = fmt(an.total.tokens);
+  $('cRate').textContent = an.total.requests ? (100*(an.total.requests-an.total.errors)/an.total.requests).toFixed(1)+'%' : '—';
+  $('cOk').textContent = an.accounts.ok + ' / ' + an.accounts.total;
+  const today = new Date().toISOString().slice(0,10);
+  $('cToday').textContent = fmt((an.byDay[today]||{}).requests || 0);
+
+  $('perfBody').innerHTML = perf.perf.length ? perf.perf.map(m=>{
+    const rateColor = m.successRate>=95?'var(--ok)':m.successRate>=80?'var(--warn)':'var(--bad)';
+    return '<tr><td class="mono">'+esc(m.model)+'</td><td>'+fmt(m.requests)+'</td>'
+      +'<td style="color:'+rateColor+'">'+m.successRate+'%<div class="bar"><i style="width:'+m.successRate+'%"></i></div></td>'
+      +'<td>'+(m.avgLatencyMs/1000).toFixed(1)+'s</td><td>'+fmt(m.tokens)+'</td></tr>';
+  }).join('') : '<tr><td colspan="5" class="mut">暂无数据（发起一次对话后生成）</td></tr>';
+
+  $('usageBody').innerHTML = byAcct.accounts.length ? byAcct.accounts.map(a=>{
+    const dist = Object.entries(a.byModel).sort((x,y)=>y[1]-x[1]).slice(0,3).map(([m,t])=>'<div class="mut">'+esc(m)+' · '+fmt(t)+'</div>').join('') || '—';
+    return '<tr><td><b>'+esc(a.email)+'</b></td><td>'+badge(a)+'</td><td>'+fmt(a.requests)+'</td><td>'+fmt(a.tokens)+'</td><td>'+dist+'</td></tr>';
+  }).join('') : '<tr><td colspan="5" class="mut">暂无账号</td></tr>';
+}
+async function loadModelsViaKey(){
+  try { const s = await api('/settings'); const r = await fetch('/v1/models',{headers:{'Authorization':'Bearer '+s.apiKey}}); const j = await r.json(); renderModels(j.data||[]); }
+  catch { $('modBody').innerHTML='<tr><td colspan="5" class="mut">加载失败</td></tr>'; }
+}
+function renderModels(list){
+  $('modBody').innerHTML = list.map(m=>{
+    const st = m.status==='online'?'<span class="badge b-ok">online</span>':m.status==='catalog'?'<span class="badge b-info">目录</span>':'<span class="badge b-cd">'+esc(m.status)+'</span>';
+    return '<tr><td class="mono">'+esc(m.id)+'</td><td>'+esc(m.name||m.id)+'</td><td>'+(m.context_window?fmt(m.context_window):'—')+'</td><td class="mut">'+(m.daily_limit||'—')+'</td><td>'+st+'</td></tr>';
+  }).join('');
+}
+
+// ---------- 账号页 ----------
+async function loadAccounts(){
+  const j = await api('/accounts');
+  $('acctBody').innerHTML = j.accounts.length ? j.accounts.map(a=>{
+    const reason = a.reason ? '<div class="mut">'+esc(a.reason).slice(0,60)+'</div>' : '';
+    return '<tr><td><b>'+esc(a.email)+'</b>'+reason+'</td><td class="mono">'+esc(a.deviceId||'—')+'</td><td>'+badge(a)+'</td>'
+      +'<td>'+fmt(a.requests)+'</td><td>'+fmt(a.tokens)+'</td><td class="mut">'+fmtT(a.lastUsed)+'</td>'
+      +'<td><button onclick="toggleAcct(\''+esc(a.email)+'\','+(!a.disabled)+')">'+(a.disabled?'启用':'停用')+'</button> '
+      +'<button class="danger" onclick="delAcct(\''+esc(a.email)+'\')">删除</button></td></tr>';
+  }).join('') : '<tr><td colspan="7" class="mut">暂无账号，点击「+ 添加账号」</td></tr>';
+}
+async function toggleAcct(email, enable){ await api('/accounts/set',{method:'POST',body:JSON.stringify({email,disabled:!enable})}); toast(enable?'已启用':'已停用'); refreshAll(); }
+async function delAcct(email){ if(!confirm('删除账号 '+email+'？')) return; await api('/accounts/delete',{method:'POST',body:JSON.stringify({email})}); toast('已删除'); refreshAll(); }
+let oauthTimer = null;
+async function startOAuth(){
+  const r = await api('/accounts/login/start',{method:'POST'});
+  $('oauthBox').style.display='block'; $('oauthWait').style.display='block'; $('oauthDone').style.display='none';
+  const a = $('oauthLink'); a.href = r.authUrl; a.textContent = r.authUrl;
+  window.open(r.authUrl, '_blank');
+  clearInterval(oauthTimer);
+  oauthTimer = setInterval(async ()=>{
+    try {
+      const p = await api('/accounts/login/poll?id='+r.id);
+      if (p.status === 'pending') return;
+      clearInterval(oauthTimer);
+      $('oauthWait').style.display='none'; $('oauthDone').style.display='block';
+      $('oauthDone').innerHTML = p.status==='authorized' ? '<span style="color:var(--ok)">✓ 授权成功：'+esc(p.email)+'</span>' : '<span class="logerr">✗ '+esc(p.status)+'</span>';
+      setTimeout(()=>{ $('oauthBox').style.display='none'; }, 4000);
+      refreshAll();
+    } catch { clearInterval(oauthTimer); }
+  }, 2000);
+}
+
+// ---------- 日志页 ----------
+async function loadLogs(){
+  const j = await api('/logs');
+  $('logBody').innerHTML = j.logs.length ? j.logs.map(l=>{
+    const st = l.status<300 ? '<span class="badge b-ok">'+l.status+'</span>' : l.status<500 ? '<span class="badge b-cd">'+l.status+'</span>' : '<span class="badge b-off">'+l.status+'</span>';
+    return '<tr><td class="mut">'+fmtT(l.ts)+'</td><td class="mono">'+esc(l.model)+'</td><td class="mut">'+esc(l.account||'—')+'</td><td>'+st+'</td>'
+      +'<td>'+((l.latencyMs||0)/1000).toFixed(1)+'s</td><td>'+fmt(l.totalTokens)+'</td><td>'+(l.stream?'✓':'—')+'</td></tr>';
+  }).join('') : '<tr><td colspan="7" class="mut">暂无日志</td></tr>';
+}
+async function clearLogs(){ await api('/logs/clear',{method:'POST'}); loadLogs(); }
+
+// ---------- 设置页 ----------
+async function loadSettings(){
+  const s = await api('/settings');
+  $('setBase').textContent = location.origin + '/v1';
+  $('setKey').textContent = s.apiKey;
+  $('setUp').textContent = s.upstream;
+  $('setVer').textContent = 'CLI ' + s.version + ' · 端口 ' + s.port;
+  $('sideInfo').innerHTML = '上游 '+esc(s.upstream)+'<br>账号统计见「分析」页';
+}
+function copyKey(){ navigator.clipboard.writeText($('setKey').textContent).then(()=>toast('API Key 已复制')); }
+async function regenKey(){
+  if(!confirm('重新生成 API Key？旧 Key 立即失效，所有客户端需更新。')) return;
+  const j = await api('/settings/apikey/regenerate',{method:'POST'});
+  $('setKey').textContent = j.apiKey; toast('已生成新 Key');
+}
+async function changePwd(){
+  try {
+    await api('/panel/password',{method:'POST',body:JSON.stringify({oldPassword:$('oldPwd').value,newPassword:$('newPwd').value})});
+    $('pwdMsg').textContent = '✓ 已修改'; $('oldPwd').value=''; $('newPwd').value='';
+  } catch(e){ $('pwdMsg').textContent = '✗ ' + e.message; }
+}
+
+// ---------- 启动 ----------
+function refreshAll(){ loadDash().catch(()=>{}); loadAccounts().catch(()=>{}); loadSettings().catch(()=>{}); }
+(async ()=>{
+  if (!TOKEN) { $('loginMask').classList.add('show'); return; }
+  try { const s = await api('/panel/status'); if (!s.loggedIn) { $('loginMask').classList.add('show'); return; } refreshAll(); }
+  catch { $('loginMask').classList.add('show'); }
+})();
+setInterval(()=>{ if (TOKEN && document.querySelector('#pDash.on')) loadDash().catch(()=>{}); }, 8000);
+</script></body></html>
